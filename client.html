@@ -230,7 +230,7 @@
     });
     socket.on("connect_error", () => setStatus("error", "Cannot reach server"));
 
-    socket.on("realtime.ready", () => {
+    socket.on("aiReady", () => {
       setStatus("connected", "Ready — OpenAI session active");
       btnSend.disabled = false;
       btnRecord.disabled = false;
