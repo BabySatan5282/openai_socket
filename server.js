@@ -3,6 +3,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const handleConnection = require("./lib/open_ai/connectSocket.js");
+const { authenticateClient } = require("./lib/utils/authHelper.js");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -14,6 +15,16 @@ const PORT = process.env.PORT || 3000;
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get("/", (req, res) => res.send("Realtime Voice Chat Server is running."));
+
+io.use(async (socket, next) => {
+  try {
+    socket.user = await authenticateClient(socket.handshake.auth || {});
+    next();
+  } catch (error) {
+    console.error(`[Authentication Error] ${error.message}`);
+    next(new Error(error.message || "Authentication failed."));
+  }
+});
 
 // ─── Socket.IO: Client Connection ─────────────────────────────────────────────
 io.on("connection", handleConnection);
