@@ -282,16 +282,27 @@
     let isPlaying = false;
     let nextPlayTime = 0;
 
-    socket.on("aiAudio", ({ data }) => {
+    socket.on("aiAudio", (data) => {
       if (!audioCtx) audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-      const pcm = base64ToPCM(data);
+      const pcm = payloadToPCM(data);
       scheduleAudio(pcm);
     });
 
-    function base64ToPCM(base64) {
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    function payloadToPCM(payload) {
+      let bytes;
+
+      if (typeof payload === "string") {
+        const binary = atob(payload);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      } else if (payload instanceof ArrayBuffer) {
+        bytes = new Uint8Array(payload);
+      } else if (ArrayBuffer.isView(payload)) {
+        bytes = new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
+      } else {
+        throw new Error("Unsupported AI audio payload type.");
+      }
+
       // PCM16 little-endian → float32
       const samples = bytes.length / 2;
       const float32 = new Float32Array(samples);
