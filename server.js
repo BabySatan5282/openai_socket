@@ -4,8 +4,11 @@ const http = require("http");
 const { Server } = require("socket.io");
 const handleConnection = require("./lib/open_ai/connectSocket.js");
 const { authenticateClient } = require("./lib/utils/authHelper.js");
+const createTriggerReminderHandler = require("./lib/api/triggerReminder.js");
+const { setUserSocket, removeUserSocket } = require("./lib/socketRegistry");
 
 const app = express();
+app.use(express.json());
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: "*" },
@@ -15,6 +18,7 @@ const PORT = process.env.PORT || 3000;
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get("/", (req, res) => res.send("Realtime Voice Chat Server is running."));
+app.post("/internal/trigger-reminder", createTriggerReminderHandler());
 
 io.use(async (socket, next) => {
   try {
@@ -27,7 +31,19 @@ io.use(async (socket, next) => {
 });
 
 // ─── Socket.IO: Client Connection ─────────────────────────────────────────────
-io.on("connection", handleConnection);
+io.on("connection", (socket) => {
+  const userId = socket.user?.userId;
+
+  if (userId) {
+    setUserSocket(userId, socket);
+  }
+
+  socket.on("disconnect", () => {
+    if (userId) removeUserSocket(userId, socket.id);
+  });
+
+  handleConnection(socket);
+});
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
 httpServer.listen(PORT, () => {
