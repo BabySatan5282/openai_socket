@@ -6,12 +6,15 @@ const handleConnection = require("./lib/open_ai/connectSocket.js");
 const { authenticateClient } = require("./lib/utils/authHelper.js");
 const createTriggerReminderHandler = require("./lib/api/triggerReminder.js");
 const { setUserSocket, removeUserSocket } = require("./lib/socketRegistry");
+const { log } = require("console");
 
 const app = express();
 app.use(express.json());
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: "*" },
+  pingInterval: 10000,
+  pingTimeout: 10000,
 });
 
 const PORT = process.env.PORT || 3000;
@@ -34,11 +37,14 @@ io.use(async (socket, next) => {
 io.on("connection", (socket) => {
   const userId = socket.user?.userId;
 
+
   if (userId) {
+    // Use socket.id as deviceId for multi-device support
     setUserSocket(userId, socket);
   }
 
   socket.on("disconnect", () => {
+    log(socket.id, "Client disconnected");
     if (userId) removeUserSocket(userId, socket.id);
   });
 
