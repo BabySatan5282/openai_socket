@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAI Socket Web Client</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    #log { background: #f4f4f4; padding: 1rem; height: 300px; overflow-y: auto; border: 1px solid #ccc; }
+    #status { margin-bottom: 1rem; }
+    input, button { padding: 0.5rem; margin: 0.2rem; }
+  </style>
+</head>
+<body>
+  <h2>OpenAI Socket Web Client</h2>
+  <div id="status">Connecting...</div>
+  <div>
+    <input id="macAddress" placeholder="MAC Address" value="AA:BB:CC:DD:EE" />
+    <input id="secretKey" placeholder="Secret Key" value="4Irabpl6vTkRnfk1pLf0Cemut4qiDHHU9VSdmB1pWJHUwIb5IBYSjDZs2sp8McMj" />
+    <button id="connectBtn">Connect</button>
+    <button id="disconnectBtn" disabled>Disconnect</button>
+  </div>
+  <div>
+    <input id="messageInput" placeholder="Type a message..." />
+    <button id="sendBtn" disabled>Send</button>
+  </div>
+  <div id="log"></div>
+  <div id="wakeUpContainer" style="margin-top:1rem; display:none;">
+    <button id="wakeUpBtn" style="padding:0.7rem 1.5rem; font-size:1.1rem; background:#ffd600; border:none; border-radius:6px; cursor:pointer;">Wake Up</button>
+  </div>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    let socket = null;
+    const status = document.getElementById('status');
+    const log = document.getElementById('log');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const macInput = document.getElementById('macAddress');
+    const secretKeyInput = document.getElementById('secretKey');
+    const messageInput = document.getElementById('messageInput');
+    const wakeUpContainer = document.getElementById('wakeUpContainer');
+    const wakeUpBtn = document.getElementById('wakeUpBtn');
+    // Wake Up button click handler
+    if (wakeUpBtn) {
+      wakeUpBtn.onclick = () => {
+        if (socket) {
+          socket.emit('wakeUp');
+          appendLog(`<span style='color:orange'>[wakeUp]</span> emitted`);
+          wakeUpContainer.style.display = 'none';
+        }
+      };
+    }
+
+    function appendLog(msg) {
+      log.innerHTML += `<div>${msg}</div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setStatus(msg, color = 'black') {
+      status.textContent = msg;
+      status.style.color = color;
+    }
+
+    // Audio playback queue to prevent overlap
+    let audioQueue = [];
+    let isPlaying = false;
+
+    function enqueueAndPlay(buffer) {
+      audioQueue.push(buffer);
+      if (!isPlaying) playNext();
+    }
+
+    function playNext() {
+      if (audioQueue.length === 0) {
+        isPlaying = false;
+        return;
+      }
+      isPlaying = true;
+      const buffer = audioQueue.shift();
+      const audioContext = window.audioContext || (window.audioContext = new (window.AudioContext || window.webkitAudioContext)());
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      source.onended = playNext;
+      source.start(0);
+    }
+
+    connectBtn.onclick = () => {
+      if (socket) socket.disconnect();
+      const mac = macInput.value.trim();
+      const secretKey = secretKeyInput.value.trim();
+      if (!mac) {
+        setStatus('MAC Address required', 'red');
+        return;
+      }
+      if (!secretKey) {
+        setStatus('Secret Key required', 'red');
+        return;
+      }
+      setStatus('Connecting...');
+      socket = io('http://localhost:3000', {
+        auth: { mac_address: mac, secret_key: secretKey }
+      });
+      socket.on('connect', () => {
+        setStatus('Connected', 'green');
+        appendLog(`<b>Connected</b>`);
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        sendBtn.disabled = false;
+      });
+      socket.on('disconnect', (reason) => {
+        setStatus('Disconnected: ' + reason, 'orange');
+        appendLog(`<b>Disconnected</b>`);
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        sendBtn.disabled = true;
+      });
+      socket.on('connect_error', (err) => {
+        setStatus('Connection error: ' + err.message, 'red');
+        appendLog(`<b>Connection error:</b> ${err.message}`);
+      });
+      socket.onAny((event, ...args) => {
+        appendLog(`<span style='color:blue'>[${event}]</span> ${JSON.stringify(args)}`);
+        if (event === 'aiSleep') {
+          wakeUpContainer.style.display = '';
+        }
+        if (event === 'wakeUp') {
+          wakeUpContainer.style.display = 'none';
+        }
+      });
+
+      // Handle aiAudio event (base64 encoded audio)
+      socket.on('aiAudio', (data) => {
+        appendLog(`<span style='color:purple'>[aiAudio]</span> received: <span style='color:#888'>${JSON.stringify(data)}</span>`);
+        console.log('[aiAudio] raw data:', data);
+        if (!data) return;
+        const audioContext = window.audioContext || (window.audioContext = new (window.AudioContext || window.webkitAudioContext)());
+
+        function playBuffer(buffer) {
+          enqueueAndPlay(buffer);
+        }
+
+        // Helper: Wrap PCM as WAV
+        function pcmToWav(arrayBuffer, sampleRate = 24000, numChannels = 1) {
+          const pcm = new Uint8Array(arrayBuffer);
+          const wavBuffer = new ArrayBuffer(44 + pcm.length);
+          const view = new DataView(wavBuffer);
+
+          // RIFF identifier 'RIFF'
+          view.setUint32(0, 0x52494646, false);
+          // file length minus RIFF and size
+          view.setUint32(4, 36 + pcm.length, true);
+          // RIFF type 'WAVE'
+          view.setUint32(8, 0x57415645, false);
+          // format chunk identifier 'fmt '
+          view.setUint32(12, 0x666d7420, false);
+          // format chunk length
+          view.setUint32(16, 16, true);
+          // sample format (raw)
+          view.setUint16(20, 1, true);
+          // channel count
+          view.setUint16(22, numChannels, true);
+          // sample rate
+          view.setUint32(24, sampleRate, true);
+          // byte rate (sample rate * block align)
+          view.setUint32(28, sampleRate * numChannels * 2, true);
+          // block align (channel count * bytes per sample)
+          view.setUint16(32, numChannels * 2, true);
+          // bits per sample
+          view.setUint16(34, 16, true);
+          // data chunk identifier 'data'
+          view.setUint32(36, 0x64617461, false);
+          // data chunk length
+          view.setUint32(40, pcm.length, true);
+
+          // Write PCM samples
+          new Uint8Array(wavBuffer, 44).set(pcm);
+
+          return wavBuffer;
+        }
+
+        // Robust binary handling
+        if (data instanceof ArrayBuffer) {
+          // Always copy buffer to avoid detached error
+          const buf = new Uint8Array(data);
+          try {
+            audioContext.decodeAudioData(buf.buffer.slice(0)).then(playBuffer).catch(() => {
+              appendLog('Direct decode failed, trying as WAV...');
+              audioContext.decodeAudioData(pcmToWav(buf.buffer)).then(playBuffer).catch((e) => {
+                appendLog('Audio decode error: ' + e.message);
+              });
+            });
+          } catch (e) {
+            appendLog('Audio decode error: ' + e.message);
+          }
+          return;
+        } else if (Array.isArray(data)) {
+          const buf = new Uint8Array(data);
+          try {
+            audioContext.decodeAudioData(buf.buffer.slice(0)).then(playBuffer).catch(() => {
+              appendLog('Direct decode failed, trying as WAV...');
+              audioContext.decodeAudioData(pcmToWav(buf.buffer)).then(playBuffer).catch((e) => {
+                appendLog('Audio decode error: ' + e.message);
+              });
+            });
+          } catch (e) {
+            appendLog('Audio decode error: ' + e.message);
+          }
+          return;
+        } else if (data.type === 'Buffer' && Array.isArray(data.data)) {
+          const buf = new Uint8Array(data.data);
+          try {
+            audioContext.decodeAudioData(buf.buffer.slice(0)).then(playBuffer).catch(() => {
+              appendLog('Direct decode failed, trying as WAV...');
+              audioContext.decodeAudioData(pcmToWav(buf.buffer)).then(playBuffer).catch((e) => {
+                appendLog('Audio decode error: ' + e.message);
+              });
+            });
+          } catch (e) {
+            appendLog('Audio decode error: ' + e.message);
+          }
+          return;
+        } else {
+          appendLog('Unknown aiAudio data format');
+          return;
+        }
+      });
+    };
+
+    disconnectBtn.onclick = () => {
+      if (socket) socket.disconnect();
+    };
+
+    sendBtn.onclick = () => {
+      const msg = messageInput.value.trim();
+      if (msg && socket) {
+        socket.emit('message', msg);
+        appendLog(`<span style='color:green'>[me]</span> ${msg}`);
+        messageInput.value = '';
+      }
+    };
+
+    messageInput.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') sendBtn.onclick();
+    });
+  </script>
+</body>
+</html>
