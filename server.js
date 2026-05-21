@@ -13,8 +13,8 @@ app.use(express.json());
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: "*" },
-  pingInterval: 600000,
-  pingTimeout: 600000,
+  pingInterval: 60000,
+  pingTimeout: 60000,
 });
 
 const PORT = process.env.PORT || 3000;
