@@ -27,7 +27,8 @@ io.engine.on("connection", (rawSocket) => {
     // packet.type က ဘာ packet လဲ ပြတယ် (ဥပမာ: message)
     // packet.data မှာ ESP ပို့လိုက်တဲ့ string အတိုင်း တစ်ပုံစံတည်း ပါလာပါလိမ့်မယ်
     
-    console.log("=== ESP Raw Packet Inbound ===");
+    const now = new Date().toISOString();
+    console.log(`=== [${now}] ESP Raw Packet Inbound ===`);
     console.log("Type:", packet.type);
     console.log("Raw Data:", packet.data); 
     console.log("=============================\n");
