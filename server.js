@@ -19,21 +19,21 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || 3000;
 
-// io.on('connection') မဟုတ်ဘဲ အောက်ခြေက io.engine မှာ ဖမ်းရမှာပါ
-io.engine.on("connection", (rawSocket) => {
+// // io.on('connection') မဟုတ်ဘဲ အောက်ခြေက io.engine မှာ ဖမ်းရမှာပါ
+// io.engine.on("connection", (rawSocket) => {
   
-  // ESP ဆီကနေ Network ပေါ်ကနေ ဝင်လာသမျှ Raw Packet တိုင်းကို ဖမ်းတာ
-  rawSocket.on("packet", (packet) => {
-    // packet.type က ဘာ packet လဲ ပြတယ် (ဥပမာ: message)
-    // packet.data မှာ ESP ပို့လိုက်တဲ့ string အတိုင်း တစ်ပုံစံတည်း ပါလာပါလိမ့်မယ်
+//   // ESP ဆီကနေ Network ပေါ်ကနေ ဝင်လာသမျှ Raw Packet တိုင်းကို ဖမ်းတာ
+//   rawSocket.on("packet", (packet) => {
+//     // packet.type က ဘာ packet လဲ ပြတယ် (ဥပမာ: message)
+//     // packet.data မှာ ESP ပို့လိုက်တဲ့ string အတိုင်း တစ်ပုံစံတည်း ပါလာပါလိမ့်မယ်
     
-    const now = new Date().toISOString();
-    console.log(`=== [${now}] ESP Raw Packet Inbound ===`);
-    console.log("Type:", packet.type);
-    console.log("Raw Data:", packet.data); 
-    console.log("=============================\n");
-  });
-});
+//     const now = new Date().toISOString();
+//     console.log(`=== [${now}] ESP Raw Packet Inbound ===`);
+//     console.log("Type:", packet.type);
+//     console.log("Raw Data:", packet.data); 
+//     console.log("=============================\n");
+//   });
+// });
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get("/", (req, res) => res.send("Realtime Voice Chat Server is running."));
